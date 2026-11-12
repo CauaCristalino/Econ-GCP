@@ -19,6 +19,7 @@ URL_API = "https://generativelanguage.googleapis.com/v1beta/models/{modelo}:gene
 MODELO_PADRAO = "gemini-3.8-flash"
 MAX_CARACTERES_DIFF = 300_000
 MAX_TENTATIVAS = 4
+TIMEOUT_SEGUNDOS = 180
 STATUS_COM_RETRY = frozenset({429, 500, 502, 503, 504})
 
 INSTRUCOES = """\
@@ -70,17 +71,18 @@ def chamar_gemini(prompt: str, chave: str, modelo: str) -> str:
     )
     for tentativa in range(1, MAX_TENTATIVAS + 1):
         try:
-            with urllib.request.urlopen(requisicao, timeout=120) as resposta:
+            with urllib.request.urlopen(requisicao, timeout=TIMEOUT_SEGUNDOS) as resposta:
                 return extrair_texto(json.load(resposta))
         except urllib.error.HTTPError as erro:
             detalhe = erro.read().decode(errors="replace")[:1000]
             if erro.code not in STATUS_COM_RETRY or tentativa == MAX_TENTATIVAS:
                 raise RuntimeError(f"Gemini respondeu HTTP {erro.code}: {detalhe}") from erro
             motivo = f"HTTP {erro.code}"
-        except urllib.error.URLError as erro:
+        except OSError as erro:
+            # Cobre falha de conexão (URLError) e tempo esgotado na resposta (TimeoutError).
+            motivo = str(getattr(erro, "reason", erro)) or type(erro).__name__
             if tentativa == MAX_TENTATIVAS:
-                raise RuntimeError(f"falha de conexão com o Gemini: {erro.reason}") from erro
-            motivo = str(erro.reason)
+                raise RuntimeError(f"falha de conexão com o Gemini: {motivo}") from erro
         espera = 15 * 2 ** (tentativa - 1)
         print(f"tentativa {tentativa} falhou ({motivo}); nova tentativa em {espera}s", flush=True)
         time.sleep(espera)
@@ -95,6 +97,7 @@ def main() -> int:
         print("diff vazio; nada a revisar")
         return 0
 
+    print(f"modelo: {modelo}; diff com {len(diff)} caracteres", flush=True)
     revisao = chamar_gemini(montar_prompt(diff), os.environ["GEMINI_API_KEY"], modelo)
     arquivo_saida.write_text(
         f"## Revisão automática (Gemini)\n\n{revisao}\n\n"
