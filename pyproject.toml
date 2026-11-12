@@ -1,0 +1,19 @@
+# Configuração das ferramentas de qualidade (lint, tipos e testes) para o repositório inteiro.
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["ingestion"]
+
+[tool.ruff.lint]
+# E/F: erros básicos, I: ordem dos imports, UP: sintaxe moderna, B: bugs comuns
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["ingestion/tests"]
+pythonpath = ["ingestion"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "ingestion"
