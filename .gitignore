@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Dados locais gerados pela ingestão (nunca versionar dado)
+data/
+
+# Segredos e credenciais (nenhuma chave entra no repositório)
+.env
+*.json.key
+*-key.json
+credentials*.json
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# dbt
+transform/target/
+transform/dbt_packages/
+transform/logs/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
