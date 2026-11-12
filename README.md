@@ -32,6 +32,7 @@ ingestion/
 ├── requirements.txt
 └── requirements-dev.txt
 pyproject.toml             # configuração do ruff, mypy e pytest
+.github/workflows/ci.yml   # lint, tipos e testes em todo PR
 ```
 
 As pastas `transform/` (dbt) e `infra/` (Terraform) entram nas fases 3 e 5.
