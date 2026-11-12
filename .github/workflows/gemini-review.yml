@@ -1,8 +1,7 @@
 name: Gemini Review
 
-# Revisão de código por IA (Gemini CLI) nos pull requests.
+# Revisão de código por IA nos pull requests, com uma única chamada à API do Gemini por revisão.
 # Roda quando um PR é aberto e quando alguém com acesso de escrita comenta "@gemini-cli /review".
-# Adaptado do exemplo oficial: github.com/google-github-actions/run-gemini-cli (examples/workflows/pr-review).
 on:
   pull_request:
     types: [opened, reopened, ready_for_review]
@@ -29,67 +28,28 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      issues: write
       pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
     steps:
+      # Sem "ref": no gatilho por comentário o script vem sempre do main, nunca do branch do PR.
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Preparar contexto do prompt
-        run: |
-          mkdir -p .gemini
-          jq -n \
-            --arg repo "${REPOSITORY}" \
-            --arg pr "${PULL_REQUEST_NUMBER}" \
-            '{repository: $repo, pull_request_number: $pr, additional_context: ""}' > .gemini/context.json
-        env:
-          REPOSITORY: ${{ github.repository }}
-          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+      - name: Baixar o diff do PR
+        run: gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/pr.diff"
 
-      - name: Revisar o pull request com o Gemini
-        uses: google-github-actions/run-gemini-cli@v0
+      - name: Pedir a revisão ao Gemini
+        run: python3 .github/scripts/gemini_review.py "$RUNNER_TEMP/pr.diff" "$RUNNER_TEMP/revisao.md"
         env:
-          GEMINI_CLI_TRUST_WORKSPACE: "true"
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        with:
-          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          workflow_name: gemini-review
-          github_pr_number: ${{ github.event.pull_request.number || github.event.issue.number }}
-          # O Gemini só recebe as ferramentas de ler o PR e escrever a revisão; nenhum comando de shell.
-          settings: |-
-            {
-              "model": {
-                "maxSessionTurns": 25
-              },
-              "mcpServers": {
-                "github": {
-                  "command": "docker",
-                  "args": [
-                    "run",
-                    "-i",
-                    "--rm",
-                    "-e",
-                    "GITHUB_PERSONAL_ACCESS_TOKEN",
-                    "ghcr.io/github/github-mcp-server:v0.27.0"
-                  ],
-                  "includeTools": [
-                    "add_comment_to_pending_review",
-                    "pull_request_read",
-                    "pull_request_review_write"
-                  ],
-                  "env": {
-                    "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
-                  }
-                }
-              },
-              "tools": {
-                "core": []
-              }
-            }
-          extensions: |
-            [
-              "https://github.com/gemini-cli-extensions/code-review"
-            ]
-          prompt: /pr-code-review
+          # Opcional: defina a variável GEMINI_MODEL no repositório para trocar de modelo.
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+
+      - name: Publicar a revisão no PR
+        run: |
+          if [ -s "$RUNNER_TEMP/revisao.md" ]; then
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/revisao.md"
+          fi
